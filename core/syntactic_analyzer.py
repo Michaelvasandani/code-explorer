@@ -2,8 +2,8 @@
 Syntactic Analyzer module for static code analysis.
 
 This module implements Phase 2 of the analysis pipeline: Static Analysis.
-It detects structural patterns and syntactic risk signals using regex-based
-pattern matching.
+It detects structural patterns and syntactic risk signals using tree-sitter
+AST parsing for accurate Swift code analysis.
 
 Per Architecture.md:
 - Detect force unwraps (!)
@@ -12,13 +12,14 @@ Per Architecture.md:
 - Detect large classes (method count heuristic)
 - Use traditional techniques (no AI)
 
-Note: Uses regex patterns instead of tree-sitter for simplicity and reliability.
-Tree-sitter would provide more accurate AST parsing but adds complexity.
+Uses tree-sitter Swift parser for accurate AST-based pattern detection,
+providing better accuracy than regex-based approaches.
 
 Architecture: Per docs/Architecture.md - Phase 2: Static Analysis
 """
 
-import re
+from tree_sitter import Language, Parser
+import tree_sitter_swift
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -51,15 +52,15 @@ class StaticFinding:
 
 
 class SyntacticAnalyzer:
-    """Performs static analysis on Swift source code.
+    """Performs static analysis on Swift source code using tree-sitter.
 
-    Uses regex-based pattern matching to detect:
+    Uses tree-sitter AST parsing to detect:
     - Force unwraps (!)
     - Force try statements (try!)
     - Singleton patterns (static let shared)
     - Large classes (excessive method count)
 
-    No AI is used - only traditional static analysis techniques.
+    No AI is used - only traditional static analysis with AST traversal.
 
     Example:
         >>> analyzer = SyntacticAnalyzer()
@@ -73,35 +74,8 @@ class SyntacticAnalyzer:
     LARGE_CLASS_METHOD_THRESHOLD = 10
 
     def __init__(self):
-        """Initialize SyntacticAnalyzer with regex patterns."""
-        # Pattern for force unwrap: identifier followed by ! (not in string/comment)
-        # Simplified: just look for word! pattern
-        self.force_unwrap_pattern = re.compile(r'\w+!')
-
-        # Pattern for force try: try! followed by expression
-        # Matches: try! expression
-        self.force_try_pattern = re.compile(r'\btry!\s+')
-
-        # Pattern for singleton: static let shared =
-        # Matches: static let shared = ClassName()
-        self.singleton_pattern = re.compile(
-            r'static\s+let\s+shared\s*=',
-            re.IGNORECASE
-        )
-
-        # Pattern for method declarations
-        # Matches: func methodName(...) { or func methodName(...) ->
-        self.method_pattern = re.compile(
-            r'^\s*func\s+\w+\s*\(',
-            re.MULTILINE
-        )
-
-        # Pattern for class/struct/actor declarations
-        # Matches: class ClassName {, struct StructName {, actor ActorName {
-        self.class_pattern = re.compile(
-            r'^\s*(class|struct|actor)\s+(\w+)',
-            re.MULTILINE
-        )
+        """Initialize SyntacticAnalyzer with tree-sitter parser."""
+        self.parser = Parser(Language(tree_sitter_swift.language()))
 
     def analyze(self, swift_code: str, file_path: str) -> List[StaticFinding]:
         """Analyze Swift source code and return static findings.
@@ -129,172 +103,175 @@ class SyntacticAnalyzer:
         if not swift_code or not swift_code.strip():
             return findings
 
-        # Remove strings and comments to avoid false positives
-        cleaned_code = self._remove_strings_and_comments(swift_code)
+        # Parse the Swift code into an AST
+        try:
+            tree = self.parser.parse(bytes(swift_code, 'utf8'))
+        except Exception as e:
+            # If parsing fails, return empty findings rather than crashing
+            return findings
+
+        # Store the original code for extracting snippets
+        self.swift_code = swift_code
+        self.lines = swift_code.split('\n')
 
         # Detect force unwraps
-        findings.extend(self._detect_force_unwraps(cleaned_code, swift_code, file_path))
+        findings.extend(self._detect_force_unwraps(tree.root_node, file_path))
 
         # Detect force try
-        findings.extend(self._detect_force_try(cleaned_code, swift_code, file_path))
+        findings.extend(self._detect_force_try(tree.root_node, file_path))
 
         # Detect singletons
-        findings.extend(self._detect_singletons(cleaned_code, swift_code, file_path))
+        findings.extend(self._detect_singletons(tree.root_node, file_path))
 
         # Detect large classes
-        findings.extend(self._detect_large_classes(swift_code, file_path))
+        findings.extend(self._detect_large_classes(tree.root_node, file_path))
 
         return findings
 
-    def _remove_strings_and_comments(self, code: str) -> str:
-        """Remove string literals and comments to avoid false positives.
+    def _detect_force_unwraps(self, node, file_path: str) -> List[StaticFinding]:
+        """Detect force unwrap operators (!) using AST traversal.
 
         Args:
-            code: Swift source code
-
-        Returns:
-            Code with strings and comments replaced by whitespace
-        """
-        # Remove multi-line comments /* ... */
-        code = re.sub(r'/\*.*?\*/', ' ', code, flags=re.DOTALL)
-
-        # Remove single-line comments // ...
-        code = re.sub(r'//.*?$', ' ', code, flags=re.MULTILINE)
-
-        # Remove string literals "..."
-        code = re.sub(r'"(?:[^"\\]|\\.)*"', ' ', code)
-
-        # Remove multi-line string literals """..."""
-        code = re.sub(r'""".*?"""', ' ', code, flags=re.DOTALL)
-
-        return code
-
-    def _detect_force_unwraps(
-        self,
-        cleaned_code: str,
-        original_code: str,
-        file_path: str
-    ) -> List[StaticFinding]:
-        """Detect force unwrap operators (!)
-
-        Args:
-            cleaned_code: Code with strings/comments removed
-            original_code: Original code for line number calculation
+            node: Tree-sitter AST node
             file_path: File path for reporting
 
         Returns:
             List of StaticFinding objects for force unwraps
         """
         findings = []
-        lines = original_code.split('\n')
 
-        for line_num, line in enumerate(lines, start=1):
-            # Skip lines that are comments or strings
-            if line.strip().startswith('//') or line.strip().startswith('/*'):
-                continue
-            if '"' in line and '!' in line:
-                # Check if ! is inside a string
-                in_string = False
-                for i, char in enumerate(line):
-                    if char == '"' and (i == 0 or line[i-1] != '\\'):
-                        in_string = not in_string
-                    if char == '!' and not in_string:
-                        # Found force unwrap outside string
-                        break
-                else:
-                    # All ! were inside strings
-                    continue
+        # Look for postfix_expression nodes with "bang" child (force unwrap operator)
+        if node.type == 'postfix_expression':
+            # Check if it has a "bang" child (force unwrap operator)
+            has_force_unwrap = False
+            for child in node.children:
+                if child.type == 'bang':
+                    has_force_unwrap = True
+                    break
 
-            # Look for force unwrap pattern
-            if re.search(r'\w+!(?!\w)', line) and not line.strip().startswith('//'):
-                # Extract snippet around the force unwrap
-                snippet = line.strip()
+            if has_force_unwrap:
+                line_num = node.start_point[0] + 1
+                code_snippet = self._get_line_snippet(line_num)
 
                 findings.append(StaticFinding(
                     type="crash_risk",
                     subtype="force_unwrap",
                     file=file_path,
                     line=line_num,
-                    code_snippet=snippet
+                    code_snippet=code_snippet
                 ))
+
+        # Recursively search children
+        for child in node.children:
+            findings.extend(self._detect_force_unwraps(child, file_path))
 
         return findings
 
-    def _detect_force_try(
-        self,
-        cleaned_code: str,
-        original_code: str,
-        file_path: str
-    ) -> List[StaticFinding]:
-        """Detect force try statements (try!)
+    def _detect_force_try(self, node, file_path: str) -> List[StaticFinding]:
+        """Detect force try statements (try!) using AST traversal.
 
         Args:
-            cleaned_code: Code with strings/comments removed
-            original_code: Original code for line number calculation
+            node: Tree-sitter AST node
             file_path: File path for reporting
 
         Returns:
             List of StaticFinding objects for force try
         """
         findings = []
-        lines = original_code.split('\n')
 
-        for line_num, line in enumerate(lines, start=1):
-            if 'try!' in line and not line.strip().startswith('//'):
-                snippet = line.strip()
+        # Look for try_expression with try_operator containing "!"
+        if node.type == 'try_expression':
+            # Check if it has a try_operator child with "!"
+            has_force_try = False
+            for child in node.children:
+                if child.type == 'try_operator':
+                    # Check if try_operator has a "!" child
+                    for try_op_child in child.children:
+                        if try_op_child.type == '!' or (hasattr(try_op_child, 'text') and try_op_child.text == b'!'):
+                            has_force_try = True
+                            break
+                if has_force_try:
+                    break
+
+            if has_force_try:
+                line_num = node.start_point[0] + 1
+                code_snippet = self._get_line_snippet(line_num)
 
                 findings.append(StaticFinding(
                     type="crash_risk",
                     subtype="force_try",
                     file=file_path,
                     line=line_num,
-                    code_snippet=snippet
+                    code_snippet=code_snippet
                 ))
+
+        # Recursively search children
+        for child in node.children:
+            findings.extend(self._detect_force_try(child, file_path))
 
         return findings
 
-    def _detect_singletons(
-        self,
-        cleaned_code: str,
-        original_code: str,
-        file_path: str
-    ) -> List[StaticFinding]:
-        """Detect singleton pattern (static let shared)
+    def _detect_singletons(self, node, file_path: str) -> List[StaticFinding]:
+        """Detect singleton pattern (static let shared) using AST traversal.
 
         Args:
-            cleaned_code: Code with strings/comments removed
-            original_code: Original code for line number calculation
+            node: Tree-sitter AST node
             file_path: File path for reporting
 
         Returns:
             List of StaticFinding objects for singletons
         """
         findings = []
-        lines = original_code.split('\n')
 
-        for line_num, line in enumerate(lines, start=1):
-            if self.singleton_pattern.search(line):
-                snippet = line.strip()
+        # Look for property_declaration with "static" modifier
+        if node.type == 'property_declaration':
+            # Check if it has "static" modifier
+            has_static = False
+            is_let = False
+            has_shared_name = False
+
+            for child in node.children:
+                # Check for modifiers
+                if child.type == 'modifiers':
+                    for modifier in child.children:
+                        if hasattr(modifier, 'text') and modifier.text == b'static':
+                            has_static = True
+
+                # Check for "let"
+                if hasattr(child, 'text') and child.text == b'let':
+                    is_let = True
+
+                # Check for pattern with "shared" identifier
+                if child.type == 'pattern':
+                    for pattern_child in child.children:
+                        if pattern_child.type == 'simple_identifier' and \
+                           hasattr(pattern_child, 'text') and pattern_child.text == b'shared':
+                            has_shared_name = True
+
+            # If we found "static let shared = ...", report it
+            if has_static and is_let and has_shared_name:
+                line_num = node.start_point[0] + 1
+                code_snippet = self._get_line_snippet(line_num)
 
                 findings.append(StaticFinding(
                     type="structural_smell",
                     subtype="singleton",
                     file=file_path,
                     line=line_num,
-                    code_snippet=snippet
+                    code_snippet=code_snippet
                 ))
+
+        # Recursively search children
+        for child in node.children:
+            findings.extend(self._detect_singletons(child, file_path))
 
         return findings
 
-    def _detect_large_classes(
-        self,
-        original_code: str,
-        file_path: str
-    ) -> List[StaticFinding]:
-        """Detect large classes based on method count.
+    def _detect_large_classes(self, node, file_path: str) -> List[StaticFinding]:
+        """Detect large classes based on method count using AST traversal.
 
         Args:
-            original_code: Original code
+            node: Tree-sitter AST node
             file_path: File path for reporting
 
         Returns:
@@ -302,36 +279,70 @@ class SyntacticAnalyzer:
         """
         findings = []
 
-        # Find all class/struct/actor declarations
-        class_matches = list(self.class_pattern.finditer(original_code))
+        # Look for class_declaration, struct_declaration, or actor_declaration
+        if node.type in ['class_declaration', 'struct_declaration', 'actor_declaration']:
+            class_type = node.type.replace('_declaration', '')
+            class_name = None
 
-        for class_match in class_matches:
-            class_type = class_match.group(1)
-            class_name = class_match.group(2)
-            class_start = class_match.start()
-
-            # Find the extent of this class (simplified: until next class or end)
-            next_class_start = len(original_code)
-            for other_match in class_matches:
-                if other_match.start() > class_start:
-                    next_class_start = other_match.start()
+            # Find the class/struct/actor name
+            for child in node.children:
+                if child.type == 'type_identifier':
+                    class_name = child.text.decode('utf8') if isinstance(child.text, bytes) else str(child.text)
                     break
 
-            class_body = original_code[class_start:next_class_start]
+            if class_name:
+                # Count methods in the class body
+                method_count = self._count_methods(node)
 
-            # Count methods in this class
-            method_count = len(self.method_pattern.findall(class_body))
+                if method_count >= self.LARGE_CLASS_METHOD_THRESHOLD:
+                    line_num = node.start_point[0] + 1
+                    code_snippet = f"{class_type} {class_name} (...)  // {method_count} methods"
 
-            if method_count >= self.LARGE_CLASS_METHOD_THRESHOLD:
-                # Calculate line number
-                line_num = original_code[:class_start].count('\n') + 1
+                    findings.append(StaticFinding(
+                        type="structural_smell",
+                        subtype="large_class",
+                        file=file_path,
+                        line=line_num,
+                        code_snippet=code_snippet
+                    ))
 
-                findings.append(StaticFinding(
-                    type="structural_smell",
-                    subtype="large_class",
-                    file=file_path,
-                    line=line_num,
-                    code_snippet=f"{class_type} {class_name} (...)  // {method_count} methods"
-                ))
+        # Recursively search children (but don't double-count nested classes)
+        for child in node.children:
+            if child.type != node.type:  # Don't count nested classes as separate
+                findings.extend(self._detect_large_classes(child, file_path))
 
         return findings
+
+    def _count_methods(self, class_node) -> int:
+        """Count the number of methods in a class/struct/actor declaration.
+
+        Args:
+            class_node: Tree-sitter AST node for class/struct/actor
+
+        Returns:
+            Number of method declarations found
+        """
+        count = 0
+
+        def traverse(node):
+            nonlocal count
+            if node.type == 'function_declaration':
+                count += 1
+            for child in node.children:
+                traverse(child)
+
+        traverse(class_node)
+        return count
+
+    def _get_line_snippet(self, line_num: int) -> str:
+        """Extract a code snippet from the given line number.
+
+        Args:
+            line_num: Line number (1-indexed)
+
+        Returns:
+            Stripped code snippet from that line
+        """
+        if 1 <= line_num <= len(self.lines):
+            return self.lines[line_num - 1].strip()
+        return ""

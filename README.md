@@ -79,7 +79,7 @@ The tool uses a **hybrid approach** combining traditional static analysis with L
 ### Key Design Decisions
 
 **1. Hybrid Analysis (Static + AI)**
-- **Static Analysis First**: Use tree-sitter to parse Swift AST and detect syntactic patterns (force unwraps, singletons). This grounds AI analysis in concrete evidence.
+- **Static Analysis First**: Use tree-sitter AST parser to detect syntactic patterns (force unwraps, force try, singletons, large classes). This grounds AI analysis in concrete evidence with precise line numbers.
 - **AI for Semantics**: LLMs excel at understanding architectural concerns, testability issues, and generating context-aware questions.
 
 **2. Multi-Phase Pipeline (not single-call)**
@@ -339,8 +339,8 @@ The generated `analysis_report.json` includes:
 ### Technical Constraints
 
 7. **Line Number Accuracy**
-   - Depends on tree-sitter pattern matching quality
-   - May be off by ±1-2 lines for complex expressions
+   - Tree-sitter AST parser provides precise line numbers for detected patterns
+   - Accurate to exact line where pattern occurs (force unwrap, force try, etc.)
 
 8. **Performance**
    - Runtime: ~60-90 seconds (not instant)

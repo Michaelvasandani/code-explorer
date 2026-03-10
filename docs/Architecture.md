@@ -1,7 +1,18 @@
-Here’s an updated `ARCHITECTURE.md` with the **specialized-validator** approach added and the agent language simplified so it stays scoped and implementable.
-
-````md
 # AI-Assisted iOS Codebase Analysis Tool
+
+**Last updated:** March 10, 2026
+**Status:** Implementation complete with schema updates
+
+> **Note on Schema Updates**: This document has been updated to reflect the actual implementation. Some schemas were simplified during development to match README.md assignment requirements:
+> - **Questions**: Simplified from structured `Question` dataclass to `List[str]`
+> - **Summary**: Changed from `dict` to simple `str`
+> - **Limitations**: Changed from `dict` to `List[str]`
+> - **Findings**: Added `severity` and `recommendation` bonus fields
+> - **Metrics**: Added for tracking API usage, tokens, and cost
+>
+> These changes improved clarity and met assignment requirements while maintaining the core 7-phase architecture.
+
+---
 
 ## Project
 Sleep Journal Codebase Analyzer
@@ -226,12 +237,17 @@ Output:
 ```python
 @dataclass
 class SemanticFinding:
-    type: str
-    subtype: str | None
-    location: str
-    explanation: str
-    evidence: str | None
-    confidence: str
+    # Required fields per README.md assignment
+    type: str  # "bug", "smell", "architecture", "test_gap", "doc_gap", "uncertainty"
+    location: str  # "file:line" or "file:line1,line2" format
+    explanation: str  # Clear description of the issue
+    confidence: str  # "high", "medium", "low"
+
+    # Optional bonus fields providing extra value
+    subtype: str = ""  # Specific issue type (e.g., "force_unwrap", "singleton_testability")
+    severity: str = ""  # "high", "medium", "low" - impact severity if issue is true
+    evidence: str = ""  # Concrete evidence from static/semantic analysis
+    recommendation: str = ""  # Actionable fix with concrete steps
 ```
 
 Allowed finding types:
@@ -347,24 +363,22 @@ Implementation:
 
 Input:
 
-* `validated_findings`
-* `architecture_summary`
+* `validated_findings` - List of SemanticFinding objects that passed validation
 
 Output:
 
+**Simplified implementation**: Returns `List[str]` (simple question strings)
+
+Example output:
 ```python
-@dataclass
-class Question:
-    id: str
-    question: str
-    why_it_matters: str
-    related_findings: list[str]
-    areas_affected: list[str]
+[
+    "What error handling strategies should we implement to safely manage potential crashes?",
+    "How can we refactor singleton patterns to improve testability?",
+    "What architectural guidelines should we follow for UIKit/SwiftUI integration?"
+]
 ```
 
-Example:
-
-Why does `WeatherClient` assume the API always returns a non-empty forecast period list?
+**Note**: Original design specified structured `Question` dataclass with `id`, `why_it_matters`, `related_findings`, and `areas_affected` fields. Implementation was simplified to simple strings per README.md requirements for faster iteration.
 
 ---
 
@@ -383,48 +397,60 @@ Schema:
 
 ```python
 @dataclass
-class Finding:
-    id: str
-    type: str
-    subtype: str | None
-    location: str
-    confidence: str
-    explanation: str
-    evidence: str | None = None
-    tags: list[str] | None = None
-
-
-@dataclass
-class Question:
-    id: str
-    question: str
-    why_it_matters: str
-    related_findings: list[str]
-    areas_affected: list[str]
-
-
-@dataclass
 class AnalysisReport:
-    high_level_summary: dict
-    findings: list[Finding]
-    questions: list[Question]
-    tool_limitations: dict
-    metadata: dict
+    summary: str  # High-level codebase description (architecture, components, findings count)
+    findings: List[SemanticFinding]  # Validated findings from Phase 5
+    questions: List[str]  # Onboarding questions from Phase 6 (simple strings)
+    limitations: List[str]  # Known limitations of this analysis approach
+    metrics: Dict[str, Any] | None  # Performance metrics (runtime, tokens, cost)
 ```
 
-Example JSON:
+**Simplified from original design**:
+- `high_level_summary: dict` → `summary: str` (simpler, clearer)
+- `questions: list[Question]` → `questions: List[str]` (no structured Question dataclass)
+- `tool_limitations: dict` → `limitations: List[str]` (simple list of limitation strings)
+- `metadata: dict` → `metrics: Dict` (renamed, tracks API usage and cost)
+- Removed `id` and `tags` fields from findings (not needed for assignment scope)
+
+Example JSON (actual output format):
 
 ```json
 {
-  "high_level_summary": {
-    "architecture_pattern": "MVVM with mixed UIKit and SwiftUI",
-    "key_components": ["JournalStore", "WeatherClient"],
-    "primary_risks": ["force unwrap crash risk"]
-  },
-  "findings": [],
-  "questions": [],
-  "tool_limitations": {},
-  "metadata": {}
+  "summary": "This is a Swift iOS application with 13 source files using mixed UIKit and SwiftUI architecture. The codebase follows a layered architecture with data models, services, and UI components. Analysis identified 8 validated findings including potential bugs, code smells, and architectural concerns that may affect maintainability and reliability.",
+  "findings": [
+    {
+      "type": "bug",
+      "location": "UI/SleepJournalListViewController.swift:120,142,147",
+      "explanation": "Multiple force unwraps on navigationController may lead to crashes if it is nil.",
+      "confidence": "high",
+      "subtype": "force_unwrap",
+      "severity": "high",
+      "evidence": "Static findings indicate force unwraps at lines 120, 142, and 147.",
+      "recommendation": "Replace force unwraps with optional binding (if let) to safely handle nil."
+    }
+  ],
+  "questions": [
+    "What error handling strategies should we implement to safely manage potential crashes from force unwrapping?",
+    "How can we refactor the singleton patterns to improve testability and reduce global state?"
+  ],
+  "limitations": [
+    "Static analysis only - does not detect runtime-specific issues or performance problems",
+    "Limited to Swift source files - does not analyze build configurations, assets, or Interface Builder files",
+    "AI-generated findings may require human validation and domain expertise"
+  ],
+  "metrics": {
+    "runtime_seconds": 63.2,
+    "api_calls": 23,
+    "input_tokens": 37457,
+    "output_tokens": 3812,
+    "estimated_cost_usd": 0.0079,
+    "cost_by_phase": {
+      "file_summarization": 0.0041,
+      "semantic_analysis": 0.0012,
+      "validation": 0.0023,
+      "question_generation": 0.0003
+    }
+  }
 }
 ```
 
@@ -568,28 +594,34 @@ Each AI component must return structured JSON matching these schemas:
 
 ## SemanticAnalyzer Output
 
+Returns a JSON array of findings (not wrapped in `{"findings": [...]}`):
+
 ```json
-{
-  "findings": [
-    {
-      "type": "bug",
-      "subtype": "force_unwrap_crash_risk",
-      "location": "Services/WeatherClient.swift:30",
-      "explanation": "Force unwrap on periods.first! will crash if API returns empty forecast array",
-      "evidence": "Line 30: let period = forecastResponse.properties.periods.first!",
-      "confidence": "high"
-    },
-    {
-      "type": "architecture",
-      "subtype": "layer_violation",
-      "location": "UI/SleepJournalListViewController.swift",
-      "explanation": "ViewController directly accesses JournalStore singleton, bypassing ViewModel for some operations",
-      "evidence": "ViewModel is used for display, but add/delete operations bypass it",
-      "confidence": "medium"
-    }
-  ]
-}
+[
+  {
+    "type": "bug",
+    "location": "Services/WeatherClient.swift:30",
+    "explanation": "Force unwrap on periods.first! will crash if API returns empty forecast array",
+    "confidence": "high",
+    "subtype": "force_unwrap_crash_risk",
+    "severity": "high",
+    "evidence": "Line 30: let period = forecastResponse.properties.periods.first!",
+    "recommendation": "Replace with optional binding: guard let period = forecastResponse.properties.periods.first else { return }"
+  },
+  {
+    "type": "architecture",
+    "location": "UI/SleepJournalListViewController.swift",
+    "explanation": "ViewController directly accesses JournalStore singleton, bypassing ViewModel for some operations",
+    "confidence": "medium",
+    "subtype": "layer_violation",
+    "severity": "medium",
+    "evidence": "ViewModel is used for display, but add/delete operations bypass it",
+    "recommendation": "Route all data operations through the ViewModel to maintain MVVM separation"
+  }
+]
 ```
+
+**Note**: Output is a JSON array, not an object with `findings` key. All 4 required fields (`type`, `location`, `explanation`, `confidence`) plus optional bonus fields (`subtype`, `severity`, `evidence`, `recommendation`).
 
 ## Validator Output
 
@@ -617,19 +649,19 @@ Or for rejected findings:
 
 ## QuestionGenerator Output
 
+**Simplified implementation**: Returns a JSON array of question strings (not structured objects):
+
 ```json
-{
-  "questions": [
-    {
-      "id": "q1",
-      "question": "Why does WeatherClient assume the forecast periods array is always non-empty?",
-      "why_it_matters": "This assumption can cause crashes if the weather API returns an unexpected response format",
-      "related_findings": ["finding_bug_001"],
-      "areas_affected": ["Services/WeatherClient.swift", "UI/SleepEntryFormView.swift"]
-    }
-  ]
-}
+[
+  "What error handling strategies should we implement to safely manage potential crashes from force unwrapping in the codebase?",
+  "How can we refactor the singleton patterns in JournalStore and WeatherCacheStore to improve testability and reduce global state?",
+  "What architectural guidelines should we follow to maintain consistency between UIKit and SwiftUI components in our views?",
+  "Where should we focus our testing efforts to ensure critical business logic in ViewModels is adequately covered?",
+  "When is it appropriate to use force unwrapping versus safer alternatives like optional binding in our code?"
+]
 ```
+
+**Note**: Original design specified structured objects with `id`, `why_it_matters`, `related_findings`, and `areas_affected`. Implementation simplified to plain strings for faster iteration and README.md compliance.
 
 ---
 
