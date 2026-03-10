@@ -82,8 +82,7 @@ venv.bak/
 .venv/
 
 # Environment variables (DO NOT COMMIT API KEYS)
-# Note: .env is already in repo with placeholder, but ignored for safety
-# .env
+.env
 
 # ============================================================================
 # Operating System
