@@ -114,6 +114,7 @@ reports/
 # Keep example reports but ignore others
 *.json
 !baseline_report.json
+!analysis_report.json
 
 # Tree-sitter build artifacts
 tree-sitter-*/
