@@ -1,0 +1,117 @@
+# File Summarization Prompt
+
+You are analyzing a Swift source file from an iOS codebase to generate a structured summary.
+
+## Task
+
+Analyze the Swift file below and produce a JSON summary that captures:
+- The file's role in the codebase
+- Main types defined (classes, structs, protocols, enums, actors)
+- External dependencies (imports and referenced types)
+- Key responsibilities
+- Suspicious patterns that may indicate bugs or code smells
+
+## File to Analyze
+
+**File Path:** {file_path}
+
+**File Content:**
+```swift
+{file_content}
+```
+
+## Analysis Guidelines
+
+1. **Be grounded in the actual code** - Base your analysis only on what is visible in this file. Do not speculate about code outside this file.
+
+2. **Focus on structure and behavior** - Identify what this file does, what types it defines, and what it depends on.
+
+3. **Identify suspicious patterns** - Look for:
+   - Force unwraps (!) that may crash
+   - Force try (try!) that may crash
+   - Singleton patterns (static let shared)
+   - Large classes with many responsibilities
+   - Missing error handling
+   - Direct dependencies on implementation details
+   - Mixed architectural patterns (UIKit + SwiftUI)
+
+4. **Extract dependencies** - Note:
+   - Import statements (Foundation, UIKit, SwiftUI, etc.)
+   - Referenced types from other files
+   - Services or stores accessed
+
+5. **Keep it concise** - Summaries should be clear and actionable, not exhaustive code descriptions.
+
+## Expected Output Format
+
+Return a valid JSON object matching this schema:
+
+```json
+{{
+  "file_path": "string",
+  "role": "string",
+  "main_types": ["string"],
+  "dependencies": ["string"],
+  "responsibilities": ["string"],
+  "suspicious_patterns": ["string"]
+}}
+```
+
+### Field Descriptions
+
+- **file_path**: The file path provided above (echo it back)
+- **role**: A concise description of this file's purpose (e.g., "data persistence service", "UI view controller", "API client")
+- **main_types**: List of class, struct, protocol, enum, or actor names defined in this file
+- **dependencies**: List of imported modules and referenced external types
+- **responsibilities**: List of key behaviors this file implements (3-5 items)
+- **suspicious_patterns**: List of risky patterns found with line numbers and brief explanations (if any)
+
+## Example Output
+
+For a file like this:
+
+```swift
+import Foundation
+
+class JournalStore {{
+    static let shared = JournalStore()
+    private var entries: [SleepEntry] = []
+
+    func save(_ entry: SleepEntry) {{
+        entries.append(entry)
+    }}
+
+    func load() -> [SleepEntry] {{
+        return entries
+    }}
+}}
+```
+
+You would return:
+
+```json
+{{
+  "file_path": "Services/JournalStore.swift",
+  "role": "data persistence service",
+  "main_types": ["JournalStore"],
+  "dependencies": ["Foundation", "SleepEntry"],
+  "responsibilities": [
+    "persist sleep entries in memory",
+    "provide access to saved entries",
+    "implement singleton pattern for shared access"
+  ],
+  "suspicious_patterns": [
+    "singleton pattern (line 3) - static let shared may make testing difficult"
+  ]
+}}
+```
+
+## Important Notes
+
+- Return **only** the JSON object, no additional text
+- Ensure all JSON is valid and properly escaped
+- If no suspicious patterns are found, return an empty array: `"suspicious_patterns": []`
+- If dependencies are unclear, list only what is explicitly visible
+- Focus on what is **actually present** in the code, not what might be intended
+
+Now analyze the file at {file_path} and return the JSON summary.

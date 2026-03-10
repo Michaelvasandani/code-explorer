@@ -1,0 +1,54 @@
+# Sleep Journal Codebase Analyzer - Python Dependencies
+# Installation: pip install -r requirements.txt
+
+# ============================================================================
+# Core Dependencies
+# ============================================================================
+
+# OpenAI API for LLM-powered semantic analysis
+openai>=1.0.0
+
+# Load environment variables from .env file (OPENAI_API_KEY)
+python-dotenv>=1.0.0
+
+# ============================================================================
+# Static Analysis Dependencies
+# ============================================================================
+
+# Tree-sitter for Swift AST parsing
+tree-sitter>=0.20.0
+
+# Swift language grammar for tree-sitter
+# Note: May need manual installation via: pip install tree-sitter-swift
+tree-sitter-swift>=0.20.0
+
+# ============================================================================
+# Testing Dependencies
+# ============================================================================
+
+# pytest testing framework
+pytest>=7.4.0
+
+# pytest code coverage plugin
+pytest-cov>=4.1.0
+
+# pytest mocking utilities
+pytest-mock>=3.11.0
+
+# ============================================================================
+# Code Quality Tools
+# ============================================================================
+
+# Code formatter for consistent style
+black>=23.0.0
+
+# Static type checker
+mypy>=1.5.0
+
+# ============================================================================
+# Utility Dependencies
+# ============================================================================
+
+# Dataclasses and type hints support (Python 3.7+)
+# Built-in for Python 3.7+, but listed for clarity
+dataclasses>=0.6; python_version < '3.7'

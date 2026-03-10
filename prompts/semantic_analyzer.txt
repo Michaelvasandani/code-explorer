@@ -1,0 +1,145 @@
+# Semantic Analysis Prompt
+
+You are analyzing a Swift iOS codebase to identify repository-level issues that require cross-file understanding.
+
+## Task
+
+Analyze the codebase using the data from Phases 1-3 and identify:
+- **Bugs**: Logic errors, potential crashes, race conditions, memory issues
+- **Code smells**: Violations of SOLID principles, tight coupling, poor separation of concerns
+- **Architecture issues**: Inconsistent patterns, mixed paradigms (UIKit/SwiftUI), circular dependencies
+- **Test gaps**: Untested critical code, missing edge case tests, no integration tests
+- **Documentation gaps**: Complex code without comments, public APIs without docs, unclear responsibilities
+
+## Input Data
+
+You have three sources of information:
+
+### 1. File Summaries (Phase 3 - AI-generated summaries)
+```json
+{file_summaries}
+```
+
+These summaries describe each file's role, types, dependencies, and responsibilities.
+
+### 2. Static Findings (Phase 2 - Syntactic analysis)
+```json
+{static_findings}
+```
+
+These are crash risks and structural smells detected by static analysis (force unwraps, singletons, large classes).
+
+### 3. Dependency Graph (Phase 2 - Import/type relationships)
+```json
+{dependency_graph}
+```
+
+This maps each file to its dependencies (imports and referenced types).
+
+## Analysis Guidelines
+
+1. **Repository-level thinking** - Look for patterns across multiple files. Static analysis already caught single-file issues.
+
+2. **Evidence-based findings** - Every finding must cite specific files, line numbers (from static findings), or concrete evidence from the summaries.
+
+3. **Architectural perspective** - Identify:
+   - Circular dependencies between files
+   - Mixed architectural patterns (e.g., UIKit view controllers calling SwiftUI views)
+   - Violation of separation of concerns (e.g., UI code in data models)
+   - Missing abstraction layers (e.g., views directly accessing persistence)
+
+4. **Testing perspective** - Identify:
+   - Critical business logic without tests
+   - Error handling code paths that are hard to test
+   - Singletons that make testing difficult
+   - Missing integration tests for multi-file workflows
+
+5. **Severity classification**:
+   - **high**: Crashes, data loss, security issues, critical bugs
+   - **medium**: Code smells affecting maintainability, test gaps for important features
+   - **low**: Minor architectural inconsistencies, documentation gaps
+
+6. **Actionable recommendations** - Provide specific, implementable fixes (e.g., "Extract NetworkService protocol to break dependency cycle between Store.swift and API.swift").
+
+## Expected Output Format
+
+Return a valid JSON array of findings matching this schema:
+
+```json
+[
+  {{
+    "type": "string",
+    "location": "string",
+    "explanation": "string",
+    "confidence": "high|medium|low",
+    "subtype": "string",
+    "severity": "high|medium|low",
+    "evidence": "string",
+    "recommendation": "string"
+  }}
+]
+```
+
+### Field Descriptions
+
+**REQUIRED FIELDS (per assignment spec):**
+- **type**: Category of issue - one of: "bug", "smell", "architecture", "test_gap", "doc_gap", "uncertainty"
+- **location**: Where the issue occurs - format as "file:line" (e.g., "Store.swift:24") or "file:line1,line2,line3" for multiple lines, or "ComponentName" for architectural issues
+- **explanation**: Clear, concise description of the issue (1-2 sentences)
+- **confidence**: How certain you are this is a real issue - "high", "medium", or "low"
+
+**OPTIONAL BONUS FIELDS (provide extra value):**
+- **subtype**: Specific issue type (e.g., "force_unwrap", "circular_dependency", "singleton_testability")
+- **severity**: Impact level if true - "high" (crashes, data loss), "medium" (maintainability), "low" (minor)
+- **evidence**: Specific evidence from the data - cite file names, line numbers from static findings, dependencies
+- **recommendation**: Actionable fix with concrete steps
+
+## Example Output
+
+For a codebase with circular dependencies and singleton testability issues:
+
+```json
+[
+  {{
+    "type": "architecture",
+    "location": "Services/JournalStore.swift+Models/SleepEntry.swift",
+    "explanation": "Circular dependency between JournalStore and SleepEntry prevents clean separation of concerns",
+    "confidence": "high",
+    "subtype": "circular_dependency",
+    "severity": "medium",
+    "evidence": "JournalStore imports SleepEntry, and SleepEntry's suspicious_patterns mention accessing JournalStore.shared",
+    "recommendation": "Extract a protocol (e.g., EntryStorage) in Models/ and have JournalStore implement it. SleepEntry should depend only on the protocol."
+  }},
+  {{
+    "type": "smell",
+    "location": "Services/JournalStore.swift:4",
+    "explanation": "JournalStore singleton pattern makes unit testing difficult",
+    "confidence": "high",
+    "subtype": "singleton_testability",
+    "severity": "medium",
+    "evidence": "Static finding shows singleton pattern at line 4. File summary confirms this is the main persistence service with no dependency injection.",
+    "recommendation": "Add dependency injection: accept a JournalStore instance in initializers instead of using .shared. Add a mock implementation for tests."
+  }},
+  {{
+    "type": "bug",
+    "location": "Services/NetworkService.swift:45,67",
+    "explanation": "Network operations lack error handling and will crash on connection failures",
+    "confidence": "high",
+    "subtype": "missing_error_handling",
+    "severity": "high",
+    "evidence": "Static findings show force try at lines 45 and 67. File summary lists network request handling as key responsibility but mentions no error handling.",
+    "recommendation": "Replace try! with proper do-catch blocks. Return Result<Data, Error> instead of forcing unwraps. Add retry logic for transient failures."
+  }}
+]
+```
+
+## Important Notes
+
+- Return **only** the JSON array, no additional text
+- Ensure all JSON is valid and properly escaped
+- If no issues are found, return an empty array: `[]`
+- Focus on **cross-file issues** - single-file problems are already in static_findings
+- Every finding must have concrete evidence from the provided data
+- Prioritize **actionable** findings over theoretical concerns
+
+Now analyze the codebase and return the JSON array of semantic findings.

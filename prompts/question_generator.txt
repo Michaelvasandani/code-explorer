@@ -1,0 +1,98 @@
+# Question Generation Prompt
+
+You are generating onboarding questions for a developer who is new to this Swift iOS codebase.
+
+## Task
+
+Based on the validated findings from the codebase analysis, synthesize **3-5 actionable onboarding questions** that help the new developer understand:
+- Why certain patterns exist
+- What the architectural decisions were
+- How to work with the existing code safely
+- Where to make changes carefully
+
+## Validated Findings
+
+These are the real issues found in the codebase that passed validation:
+
+```json
+{validated_findings}
+```
+
+## Question Generation Guidelines
+
+1. **Synthesize, don't just list** - Don't ask "Why is there a force unwrap in NetworkService.swift?" Instead ask broader questions like "What error handling strategy should we use for network operations?"
+
+2. **Focus on actionable understanding** - Questions should help the developer work with the code, not just critique it.
+
+3. **Prioritize by impact** - Focus on high-severity findings and architectural patterns that affect multiple files.
+
+4. **Be specific but not pedantic** - Reference specific files/components, but frame questions around understanding, not just fixing individual lines.
+
+5. **Question types to generate:**
+   - **Why questions**: "Why does the app use singletons for state management?"
+   - **How questions**: "How should we handle errors in network operations?"
+   - **What questions**: "What's the intended architecture for data flow between views and models?"
+   - **Where questions**: "Where should we add tests for critical business logic?"
+   - **When questions**: "When is it safe to use force unwraps vs optional binding?"
+
+## Question Characteristics
+
+Good onboarding questions are:
+- ✅ **Actionable** - Help the developer make decisions
+- ✅ **Synthesized** - Combine multiple findings into broader patterns
+- ✅ **Specific** - Reference actual files/components
+- ✅ **Educational** - Teach about the codebase's patterns
+- ✅ **Forward-looking** - Focus on "how to work with this" not just "what's wrong"
+
+Bad onboarding questions are:
+- ❌ **Trivial** - "Why is there a typo in line 42?"
+- ❌ **Obvious** - "Should we remove unused code?"
+- ❌ **Accusatory** - "Why didn't the original developer add tests?"
+- ❌ **Too granular** - One question per finding instead of synthesizing
+- ❌ **Unanswerable** - Questions requiring knowledge outside the codebase
+
+## Expected Output Format
+
+Return a valid JSON object with an array of questions:
+
+```json
+{{
+  "questions": [
+    "string",
+    "string",
+    "string"
+  ]
+}}
+```
+
+Each question should be:
+- A complete, grammatically correct question
+- 10-25 words long
+- Specific enough to be actionable
+- Broad enough to cover patterns, not individual lines
+
+## Example Output
+
+For findings about singletons, missing error handling, and circular dependencies:
+
+```json
+{{
+  "questions": [
+    "What's the intended pattern for dependency injection, and where should we use singletons vs passing dependencies?",
+    "How should we handle errors in network and persistence operations to prevent crashes?",
+    "What's the architectural boundary between models and services to avoid circular dependencies?",
+    "Where are the critical code paths that need test coverage before making changes?",
+    "When working with SwiftUI views, what's the recommended pattern for accessing shared state?"
+  ]
+}}
+```
+
+## Important Notes
+
+- Return **only** the JSON object, no additional text
+- Generate **3-5 questions** total (not one per finding)
+- **Synthesize** findings into broader patterns
+- If there are no findings (empty array), return 1-2 general onboarding questions about the codebase structure
+- Questions should help the developer **understand and work with** the existing code, not just fix issues
+
+Now analyze the validated findings and generate onboarding questions.

@@ -1,0 +1,166 @@
+# Validation Prompt
+
+You are validating a finding from an AI-powered codebase analysis to determine if it's accurate and actionable.
+
+## Task
+
+Validate the following finding and determine:
+1. **Is it valid?** - Is this finding grounded in evidence and accurate?
+2. **Confidence level** - How certain are you about this validation?
+3. **Reasoning** - Why is this finding valid or invalid?
+
+## Finding to Validate
+
+**Type:** {finding_type}
+
+**Finding:**
+```json
+{finding}
+```
+
+## Context-Aware Validation
+
+Your validation approach should adapt based on the finding type:
+
+### For Bugs
+- **Valid if:** There's concrete evidence of incorrect behavior, crashes, or logic errors
+- **Invalid if:** The behavior is intentional, already handled, or speculative
+- **Check:** Does the evidence show actual faulty code? Are error cases truly unhandled?
+
+### For Architecture Issues
+- **Valid if:** There's clear violation of architectural patterns with concrete examples
+- **Invalid if:** The pattern is intentional for this codebase, or the issue is subjective
+- **Check:** Is there actual coupling/dependency evidence? Is the pattern truly problematic?
+
+### For Code Smells
+- **Valid if:** The smell significantly impacts maintainability with clear evidence
+- **Invalid if:** It's a minor style issue or doesn't truly harm the codebase
+- **Check:** Is this a real maintainability problem or just a preference?
+
+### For Test Gaps
+- **Valid if:** Critical code paths lack tests and are identified with specificity
+- **Invalid if:** Tests exist but weren't detected, or the code is trivial
+- **Check:** Is the untested code actually critical? Are there truly no tests?
+
+### For Documentation Gaps
+- **Valid if:** Complex public APIs or critical code lack necessary documentation
+- **Invalid if:** The code is self-explanatory or documentation exists elsewhere
+- **Check:** Is documentation truly missing and necessary?
+
+## Validation Criteria
+
+A finding is **valid** if ALL of these are true:
+1. **Grounded in evidence** - The finding cites specific files, lines, or concrete data from the analysis
+2. **Accurate** - The finding correctly identifies the issue based on the evidence
+3. **Actionable** - The recommendation provides a specific, implementable fix
+4. **Not a false positive** - The issue is real, not a misinterpretation or hallucination
+5. **Relevant** - The issue matters for code quality, safety, or maintainability
+
+A finding is **invalid** if ANY of these are true:
+1. **No evidence** - Speculative claims without concrete references
+2. **Incorrect** - Misinterprets the code or evidence
+3. **Not actionable** - Vague or theoretical recommendations
+4. **False positive** - The "issue" is actually intentional or doesn't exist
+5. **Trivial** - Insignificant issue that doesn't warrant attention
+
+## Confidence Levels
+
+- **high** (0.8-1.0): Strong evidence, clear validity determination
+- **medium** (0.5-0.79): Some ambiguity, but likely correct assessment
+- **low** (0.0-0.49): Uncertain, requires human review
+
+## Expected Output Format
+
+Return a valid JSON object matching this schema:
+
+```json
+{{
+  "is_valid": true,
+  "confidence": 0.9,
+  "reasoning": "The finding correctly identifies a circular dependency between JournalStore and SleepEntry with concrete evidence from the dependency graph. The recommendation to extract a protocol is specific and actionable."
+}}
+```
+
+### Field Descriptions
+
+- **is_valid**: Boolean - true if the finding is accurate and should be kept, false if it should be filtered out
+- **confidence**: Float between 0.0 and 1.0 - your confidence in this validation decision
+- **reasoning**: String - clear explanation of why the finding is valid or invalid, citing specific evidence
+
+## Example Validations
+
+### Example 1: Valid Bug Finding
+**Input:**
+```json
+{{
+  "type": "bug",
+  "severity": "high",
+  "description": "Network operations lack error handling",
+  "evidence": "Static findings show 2 force try statements in NetworkService.swift",
+  "recommendation": "Replace try! with proper do-catch blocks"
+}}
+```
+
+**Output:**
+```json
+{{
+  "is_valid": true,
+  "confidence": 0.95,
+  "reasoning": "Strong evidence from static analysis (2 force try statements). Force try causes crashes on errors, making this a valid high-severity bug. The recommendation is specific and actionable."
+}}
+```
+
+### Example 2: Invalid False Positive
+**Input:**
+```json
+{{
+  "type": "test_gap",
+  "severity": "medium",
+  "description": "Missing tests for UserDefaults access",
+  "evidence": "No test files found for SettingsStore.swift",
+  "recommendation": "Add unit tests for settings persistence"
+}}
+```
+
+**Output:**
+```json
+{{
+  "is_valid": false,
+  "confidence": 0.7,
+  "reasoning": "While no test files were detected, UserDefaults is a system framework that's typically not unit tested directly. The code may use integration tests or the framework's reliability may be sufficient. Without seeing the actual implementation complexity, this appears to be a false positive."
+}}
+```
+
+### Example 3: Valid Architecture Issue
+**Input:**
+```json
+{{
+  "type": "architecture_issue",
+  "subtype": "circular_dependency",
+  "severity": "medium",
+  "files": ["Services/JournalStore.swift", "Models/SleepEntry.swift"],
+  "description": "Circular dependency prevents clean separation",
+  "evidence": "JournalStore imports SleepEntry, and SleepEntry's suspicious_patterns mention accessing JournalStore.shared",
+  "recommendation": "Extract EntryStorage protocol for dependency inversion"
+}}
+```
+
+**Output:**
+```json
+{{
+  "is_valid": true,
+  "confidence": 0.85,
+  "reasoning": "Clear evidence of circular dependency from import analysis and static findings. The circular dependency between a service and its model is a legitimate architecture issue. The protocol extraction recommendation follows SOLID principles and is actionable."
+}}
+```
+
+## Important Notes
+
+- Return **only** the JSON object, no additional text
+- Base your validation on the **evidence provided** in the finding
+- Be skeptical of vague or speculative claims
+- Consider whether the finding provides **actionable value**
+- False positives waste developer time - filter them out
+- When uncertain, explain your reasoning clearly
+
+Now validate the finding and return the JSON result.
