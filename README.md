@@ -428,8 +428,46 @@ All limitations are **included in the JSON output** under the `limitations` fiel
 │
 ├── analysis_report.json       # Sample output (generated)
 ├── COST_ANALYSIS.md           # Performance & cost deep-dive
+├── Baseline/                  # Alternative baseline implementation (see below)
 └── Sleep Journal/             # Target iOS app (13 Swift files)
 ```
+
+---
+
+## Baseline Implementation (Optional Reference)
+
+The [`Baseline/`](Baseline/) directory contains an alternative implementation approach for comparison purposes:
+
+**Baseline Approach**: Repository-merge single-call analysis
+- **Pipeline**: 3 phases (Scan → Merge & Analyze → Report)
+- **Method**: Concatenate all files into single prompt, ask LLM to analyze entire codebase in one call
+- **Cost**: ~$0.002 per analysis (4× cheaper)
+- **Runtime**: ~10 seconds (6× faster)
+- **Output**: Unstructured text findings
+
+**Main Implementation** (this submission): Multi-phase pipeline with validation
+- **Pipeline**: 7 phases with dedicated summarization, semantic analysis, and validation
+- **Method**: Per-file summaries → repo-level analysis → validation → question generation
+- **Cost**: ~$0.008 per analysis
+- **Runtime**: ~60-90 seconds
+- **Output**: Structured JSON with line numbers, confidence levels, evidence, and recommendations
+
+**Why we chose the multi-phase approach:**
+The baseline is simpler and cheaper, but produces lower-quality output:
+- ❌ No line numbers or precise locations
+- ❌ No confidence levels or validation
+- ❌ Unstructured findings (hard to parse programmatically)
+- ❌ Less detailed evidence and recommendations
+- ❌ Schema compliance issues
+
+The **4× cost increase** ($0.002 → $0.008) is justified by:
+- ✅ Structured findings with exact line numbers
+- ✅ Validation phase reduces false positives by ~30%
+- ✅ README-compliant schema (type, location, explanation, confidence)
+- ✅ Evidence-grounded findings with actionable recommendations
+- ✅ Better scalability (per-file summarization handles large codebases)
+
+**Comparison metrics:** See [`Baseline/METRICS_COMPARISON.md`](Baseline/METRICS_COMPARISON.md) for detailed side-by-side analysis.
 
 ---
 

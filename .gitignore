@@ -126,3 +126,6 @@ logs/
 tmp/
 temp/
 *.tmp
+
+# Development tracking (keep locally, don't commit)
+docs/todo.md
